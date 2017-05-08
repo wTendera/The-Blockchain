@@ -23,6 +23,17 @@ class Chain {
         // propagate this change to world
     }
 
+    addBlock(block) {
+        //TODO validations
+        if(this.blocks[block.fingerprint]) {
+            console.log('Transaction already exists')
+            return false
+        }
+        this.blocks[block.fingerprint] = block
+        this.latestBlock = block.fingerprint
+        return true
+    }
+
 
     //chain = {}, latestBlockFingerprint = fingerprint
     isValidChain(chain, latestBlockFingerprint) {

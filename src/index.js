@@ -4,27 +4,22 @@ const express = require('express')
 const bodyParser = require('body-parser');
 const _ = require('lodash')
 const Chain = require('./chain')
-
+const Block = require('./block')
+const port = process.env.PORT || 3000
 
 const app = express()
 
 let peers = []
-
-const port = process.env.PORT || 3000
 let chain = null
 
 
-
-request.post('localhost:3010/register').send({port: port})
-    .then(res => {
-            console.log("Successfully registered")
-        }, err => console.log("Error while registering:", err))
-
 app.disable('x-powered-by');
-
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({extended: false}));
 
+app.get('/', function (req, res) {
+    res.send({blocks: (chain || {}).blocks, latestBlock: (chain || {}).latestBlock, genesisBlock: (chain || {}).genesisBlock})
+})
 
 app.post('/peers', function (req, res) {
     peers = _.uniq(peers.concat(req.body))
@@ -43,10 +38,44 @@ app.post('/peers', function (req, res) {
     res.sendStatus(200)
 })
 
-app.get('/', function (req, res) {
-    res.send({blocks: (chain || {}).blocks, latestBlock: (chain || {}).latestBlock, genesisBlock: (chain || {}).genesisBlock})
+
+app.post('/block', function (req, res) {
+
+    if(chain.addBlock(req.body)) {
+        console.log(`New block added, latest block: ${req.body.fingerprint}`)
+        res.sendStatus(200)
+    } else {
+        res.sendStatus(403)
+    }
 })
 
 app.listen(port, function () {
     console.log(`Example app listening on port ${port}!`)
 })
+
+
+
+request.post('localhost:3010/register').send({port: port})
+    .then(res => {
+        console.log("Successfully registered")
+    }, err => console.log("Error while registering:", err))
+
+
+setInterval(function(){
+    let block = new Block(chain.latestBlock, {from: 'me', to: 'world', kisses: Math.floor((Math.random() * 10) + 1)})
+    chain.addBlock(block)
+    peers.forEach(peer => {
+        if(peer.endsWith(port)) {
+            // omit request to yourself
+            return
+        }
+        request.post(`${peer}/block`).send(block).then((res) => {
+            let body = res.body || {}
+            chain = new Chain(body.blocks, body.latestBlock, body.genesisBlock)
+            console.log(`Peer ${peer} accepted transaction ${block.fingerprint}`)
+        }, err => `Peer ${peer} didn't accept transaction ${block.fingerprint}`)
+    })
+}, 3000);
+
+
+
